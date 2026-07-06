@@ -1,93 +1,123 @@
 import * as XLSX from 'xlsx';
 import type { RosterData, ShiftEvent } from './types';
 
-const excelEpoch = new Date(Date.UTC(1899, 11, 30));
 const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const dateHeaderPattern = /^\s*(\d{1,2})\s*[-\s/]\s*([A-Za-z]{3,})\b/;
+const knownShiftCodes = new Set(['MID', 'OFF', 'M', 'A', 'N', 'H8']);
 
 function toIso(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function excelSerialToDate(value: number) {
-  const date = new Date(excelEpoch);
-  date.setUTCDate(date.getUTCDate() + value);
-  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+function parseHeaderDate(text: string, year: number): Date | null {
+  const match = text.match(dateHeaderPattern);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const monthIndex = monthNames.findIndex((month) => match[2].toLowerCase().startsWith(month));
+  if (monthIndex < 0 || day < 1 || day > 31) return null;
+
+  const date = new Date(year, monthIndex, day);
+  if (date.getMonth() !== monthIndex || date.getDate() !== day) return null;
+
+  return date;
 }
 
-function parseDateCell(value: unknown, fallbackYear: number): Date | null {
+function cellText(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number) {
+  const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
+  return String(cell?.w ?? cell?.v ?? '').trim();
+}
 
-    if (value instanceof Date)
-        return value;
+function normalizedCode(value: string) {
+  return value.trim().toUpperCase();
+}
 
-    if (typeof value === "number")
-        return excelSerialToDate(value);
-
-    const text = String(value ?? "")
-        .trim()
-        .replace(/\./g, "-");
-
-    const match = text.match(/^(\d{1,2})-(\w+)/);
-
-    if (!match)
-        return null;
-
-    const day = Number(match[1]);
-
-    const month = monthNames.findIndex(m =>
-        match[2].toLowerCase().startsWith(m)
-    );
-
-    if (month < 0)
-        return null;
-
-    return new Date(fallbackYear, month, day);
+function isKnownShiftCode(value: string) {
+  return knownShiftCodes.has(normalizedCode(value));
 }
 
 function likelyName(value: unknown) {
   const text = String(value ?? '').trim();
-  return /^[\p{L} .'-]{3,}$/u.test(text) && !/employee|equipment|morning|night|after|shift/i.test(text);
+  return Boolean(text) && !isKnownShiftCode(text) && /^[\p{L} .'-]{3,}$/u.test(text) && !/employee|equipment|morning|night|after|shift/i.test(text);
+}
+
+function rowHasShift(sheet: XLSX.WorkSheet, rowIndex: number, dateColumns: RosterData['dateColumns']) {
+  return dateColumns.some(({ index }) => isKnownShiftCode(cellText(sheet, rowIndex, index)));
+}
+
+function inferEmployeeColumn(sheet: XLSX.WorkSheet, range: XLSX.Range, headerRow: number, dateColumns: RosterData['dateColumns']) {
+  for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+    if (/employee|name/i.test(cellText(sheet, headerRow, columnIndex))) return columnIndex;
+  }
+
+  const firstDateColumn = Math.min(...dateColumns.map(({ index }) => index));
+  let bestColumn = range.s.c;
+  let bestScore = -1;
+
+  for (let columnIndex = range.s.c; columnIndex < firstDateColumn; columnIndex += 1) {
+    let score = 0;
+
+    for (let rowIndex = headerRow + 1; rowIndex <= range.e.r; rowIndex += 1) {
+      const value = cellText(sheet, rowIndex, columnIndex);
+      if (likelyName(value) && rowHasShift(sheet, rowIndex, dateColumns)) score += 1;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestColumn = columnIndex;
+    }
+  }
+
+  return bestColumn;
 }
 
 export async function parseRoster(file: File): Promise<RosterData> {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, blankrows: false });
+  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:A1');
   const currentYear = new Date().getFullYear();
 
   let headerRow = -1;
   let dateColumns: RosterData['dateColumns'] = [];
-  for (let rowIndex = 0; rowIndex < Math.min(rows.length, 12); rowIndex += 1) {
-    const columns = rows[rowIndex] ?? [];
-    const detected = columns
-      .map((cell, index) => ({ index, date: parseDateCell(cell, currentYear) }))
-      .filter((item): item is { index: number; date: Date } => Boolean(item.date));
+
+  for (let rowIndex = range.s.r; rowIndex <= Math.min(range.e.r, range.s.r + 11); rowIndex += 1) {
+    const detected: RosterData['dateColumns'] = [];
+
+    for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+      const date = parseHeaderDate(cellText(sheet, rowIndex, columnIndex), currentYear);
+      if (date) detected.push({ index: columnIndex, date, isoDate: toIso(date) });
+    }
+
     if (detected.length >= 3) {
       headerRow = rowIndex;
-      dateColumns = detected.map(({ index, date }) => ({ index, date, isoDate: toIso(date) }));
+      dateColumns = detected;
       break;
     }
   }
-  if (headerRow < 0 || dateColumns.length === 0) throw new Error('Could not find the date header row. Make sure the top row contains dates.');
 
-  const nameColumn = rows[headerRow]?.findIndex((cell) => /employee|name/i.test(String(cell ?? '')));
-  const employeeCol = nameColumn && nameColumn >= 0 ? nameColumn : 0;
+  if (headerRow < 0 || dateColumns.length === 0) throw new Error('Could not find the date header row. Make sure the top row contains dates like 1-Jul, 2-Jul, etc.');
+
+  const employeeCol = inferEmployeeColumn(sheet, range, headerRow, dateColumns);
+
   const employees: string[] = [];
   const parsedRows: RosterData['rows'] = {};
 
-  for (let rowIndex = headerRow + 1; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex] ?? [];
-    const employee = String(row[employeeCol] ?? '').trim();
+  for (let rowIndex = headerRow + 1; rowIndex <= range.e.r; rowIndex += 1) {
+    const employee = cellText(sheet, rowIndex, employeeCol);
     if (!likelyName(employee)) continue;
+
     const shifts: Record<string, string> = {};
     dateColumns.forEach(({ index, isoDate }) => {
-      const value = String(row[index] ?? '').trim();
+      const value = cellText(sheet, rowIndex, index);
       if (value) shifts[isoDate] = value;
     });
+
     if (Object.keys(shifts).length) {
       employees.push(employee);
       parsedRows[employee] = shifts;
     }
   }
+
   if (!employees.length) throw new Error('No employee rows were found below the date header.');
 
   const monthCounts = dateColumns.reduce<Record<number, number>>((acc, column) => {
