@@ -1,8 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Moon, Printer, Search, Sun, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Download, Moon, Printer, Search, Sun } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { eventsForEmployee, parseRoster } from './parser';
 import type { RosterData, ShiftColor, ShiftEvent } from './types';
 
 const shiftColors: Record<string, ShiftColor> = {
@@ -103,13 +102,33 @@ function OffTodaySection({ daily, selectedEmployee }: { daily?: DailyRoster; sel
 export default function App() {
   const [dark, setDark] = useState(true);
   const [roster, setRoster] = useState<RosterData | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState(localStorage.getItem('work-schedule-employee') ?? '');
+  const [selectedEmployee, setSelectedEmployee] = useState('');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEvent, setSelectedEvent] = useState<ShiftEvent | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch(`${import.meta.env.BASE_URL}schedule.json`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Schedule file not found. Run npm run import -- path/to/roster.xlsx.');
+        return response.json() as Promise<ScheduleJson>;
+      })
+      .then((data) => {
+        if (!mounted) return;
+        const parsed = hydrateRoster(data);
+        setRoster(parsed);
+        setCurrentMonth(parsed.month);
+        setCurrentYear(parsed.year);
+        setSelectedEmployee(parsed.employees[0] ?? '');
+      })
+      .catch((err) => mounted && setError(err instanceof Error ? err.message : 'Unable to load schedule.'));
+    return () => { mounted = false; };
+  }, []);
+
   const events = useMemo(() => (roster && selectedEmployee ? eventsForEmployee(roster, selectedEmployee) : []), [roster, selectedEmployee]);
   const eventMap = useMemo(() => Object.fromEntries(events.map((event) => [event.isoDate, event])), [events]);
   const rosterIndex = useMemo(() => buildRosterIndex(roster), [roster]);
@@ -120,17 +139,6 @@ export default function App() {
   const title = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(new Date(currentYear, currentMonth));
   const todayIso = iso(new Date());
 
-  async function handleFile(file?: File) {
-    if (!file) return;
-    if (!/\.xlsx?$/i.test(file.name)) { setError('Please upload a .xlsx or .xls Excel file.'); return; }
-    try {
-      setError('');
-      const parsed = await parseRoster(file);
-      setRoster(parsed); setCurrentMonth(parsed.month); setCurrentYear(parsed.year);
-      const remembered = parsed.employees.includes(selectedEmployee) ? selectedEmployee : parsed.employees[0];
-      setSelectedEmployee(remembered); localStorage.setItem('work-schedule-employee', remembered);
-    } catch (err) { setError(err instanceof Error ? err.message : 'We could not read this spreadsheet.'); }
-  }
   async function exportPdf() {
     if (!printRef.current) return;
     const canvas = await html2canvas(printRef.current, { backgroundColor: dark ? '#111113' : '#ffffff', scale: 2 });
