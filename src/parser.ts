@@ -27,9 +27,7 @@ function cellText(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number) 
   return String(cell?.w ?? cell?.v ?? '').trim();
 }
 
-function likelyName(value: unknown) {
-  const text = String(value ?? '').trim();
-  return /^[\p{L} .'-]{3,}$/u.test(text) && !/employee|equipment|morning|night|after|shift/i.test(text);
+  return bestColumn;
 }
 
 export async function parseRoster(file: File): Promise<RosterData> {
