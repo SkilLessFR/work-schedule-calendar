@@ -15,20 +15,32 @@ function excelSerialToDate(value: number) {
 }
 
 function parseDateCell(value: unknown, fallbackYear: number): Date | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
-  if (typeof value === 'number' && value > 1 && value < 60000) return excelSerialToDate(value);
-  const text = String(value ?? '').trim().replace(/\./g, '-');
-  if (!text) return null;
-  const native = new Date(text);
-  if (!Number.isNaN(native.getTime()) && /\d/.test(text)) return native;
-  const dayMonth = text.match(/^(\d{1,2})[-/\s]([A-Za-z]{3,}|\d{1,2})(?:[-/\s](\d{2,4}))?$/);
-  if (!dayMonth) return null;
-  const day = Number(dayMonth[1]);
-  const monthToken = dayMonth[2].toLowerCase();
-  const month = /^\d+$/.test(monthToken) ? Number(monthToken) - 1 : monthNames.findIndex((name) => monthToken.startsWith(name));
-  const year = dayMonth[3] ? Number(dayMonth[3].length === 2 ? `20${dayMonth[3]}` : dayMonth[3]) : fallbackYear;
-  if (month < 0 || day < 1 || day > 31) return null;
-  return new Date(year, month, day);
+
+    if (value instanceof Date)
+        return value;
+
+    if (typeof value === "number")
+        return excelSerialToDate(value);
+
+    const text = String(value ?? "")
+        .trim()
+        .replace(/\./g, "-");
+
+    const match = text.match(/^(\d{1,2})-(\w+)/);
+
+    if (!match)
+        return null;
+
+    const day = Number(match[1]);
+
+    const month = monthNames.findIndex(m =>
+        match[2].toLowerCase().startsWith(m)
+    );
+
+    if (month < 0)
+        return null;
+
+    return new Date(fallbackYear, month, day);
 }
 
 function likelyName(value: unknown) {
@@ -37,7 +49,7 @@ function likelyName(value: unknown) {
 }
 
 export async function parseRoster(file: File): Promise<RosterData> {
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, blankrows: false });
   const currentYear = new Date().getFullYear();
