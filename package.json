@@ -16,5 +16,8 @@
     "jspdf": "latest",
     "html2canvas": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
 }

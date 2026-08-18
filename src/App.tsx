@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { type TouchEvent, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Download, Moon, Printer, Search, Sun } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -27,6 +27,7 @@ const EMPLOYEE_STORAGE_KEY = 'work-schedule-employee';
 // ---------------------------------------------------------------------------
 
 type DailyRoster = { morning: string[]; afternoon: string[]; night: string[]; mid: string[]; off: string[] };
+type DragState = { startY: number; currentY: number; dragging: boolean };
 type WorkingGroup = { title: string; employees: { name: string; suffix?: string }[] };
 type LoadStatus = 'loading' | 'error' | 'loaded';
 
@@ -36,7 +37,7 @@ type ScheduleJson = {
   month: number;
   year: number;
   employees: string[];
-  dateColumns: { isoDate: string }[];
+  dateColumns: { index?: number; date?: string; isoDate: string }[];
   rows: Record<string, Record<string, string>>;
 };
 
@@ -65,7 +66,11 @@ function hydrateRoster(json: ScheduleJson): RosterData {
     month: json.month,
     year: json.year,
     employees: json.employees,
-    dateColumns: json.dateColumns,
+    dateColumns: json.dateColumns.map((column, index) => ({
+      index: column.index ?? index,
+      date: new Date(column.date ?? column.isoDate),
+      isoDate: column.isoDate,
+    })),
     rows: json.rows,
   };
 }
@@ -74,7 +79,7 @@ function hydrateRoster(json: ScheduleJson): RosterData {
 function eventsForEmployee(roster: RosterData, employee: string): ShiftEvent[] {
   return roster.dateColumns.reduce<ShiftEvent[]>((events, { isoDate }) => {
     const shift = roster.rows[employee]?.[isoDate];
-    if (shift) events.push({ isoDate, shift, date: new Date(isoDate) });
+    if (shift) events.push({ id: `${employee}-${isoDate}`, isoDate, shift, date: new Date(isoDate) });
     return events;
   }, []);
 }
@@ -162,6 +167,7 @@ export default function App() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEvent, setSelectedEvent] = useState<ShiftEvent | null>(null);
+  const [sheetDrag, setSheetDrag] = useState<DragState>({ startY: 0, currentY: 0, dragging: false });
   const printRef = useRef<HTMLDivElement>(null);
 
   // Load the schedule once on mount.
@@ -179,7 +185,8 @@ export default function App() {
         setRoster(parsed);
         setCurrentMonth(parsed.month);
         setCurrentYear(parsed.year);
-        setSelectedEmployee(parsed.employees[0] ?? '');
+        const savedEmployee = localStorage.getItem(EMPLOYEE_STORAGE_KEY);
+        setSelectedEmployee(savedEmployee && parsed.employees.includes(savedEmployee) ? savedEmployee : parsed.employees[0] ?? '');
         setStatus('loaded');
       })
       .catch((err) => {
@@ -218,6 +225,29 @@ export default function App() {
     localStorage.setItem(EMPLOYEE_STORAGE_KEY, name);
   }, []);
 
+  const closeSelectedEvent = useCallback(() => {
+    setSheetDrag({ startY: 0, currentY: 0, dragging: false });
+    setSelectedEvent(null);
+  }, []);
+
+  const handleSheetTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    setSheetDrag({ startY: event.touches[0].clientY, currentY: event.touches[0].clientY, dragging: true });
+  }, []);
+
+  const handleSheetTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    setSheetDrag((drag) => drag.dragging ? { ...drag, currentY: event.touches[0].clientY } : drag);
+  }, []);
+
+  const handleSheetTouchEnd = useCallback(() => {
+    setSheetDrag((drag) => {
+      if (drag.dragging && drag.currentY - drag.startY > 80) {
+        setSelectedEvent(null);
+        return { startY: 0, currentY: 0, dragging: false };
+      }
+      return { startY: 0, currentY: 0, dragging: false };
+    });
+  }, []);
+
   const exportPdf = useCallback(async () => {
     if (!printRef.current) return;
     const canvas = await html2canvas(printRef.current, { backgroundColor: dark ? '#111113' : '#ffffff', scale: 2 });
@@ -225,6 +255,8 @@ export default function App() {
     pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
     pdf.save('work-schedule.pdf');
   }, [dark]);
+
+  const sheetOffset = sheetDrag.dragging ? Math.max(0, sheetDrag.currentY - sheetDrag.startY) : 0;
 
   if (status === 'loading') {
     return <main className={dark ? 'dark' : ''}><div className="flex min-h-screen items-center justify-center bg-zinc-100 text-zinc-950 dark:bg-black dark:text-white">
@@ -238,9 +270,9 @@ export default function App() {
     </div></main>;
   }
 
-  return <main className={dark ? 'dark' : ''}><div className="min-h-screen bg-zinc-100 text-zinc-950 transition dark:bg-black dark:text-white">
+  return <main className={dark ? 'dark' : ''}><div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_#bbf7d0,_transparent_35%),radial-gradient(circle_at_top_right,_#bfdbfe,_transparent_30%),linear-gradient(180deg,_#f4f4f5,_#e4e4e7)] text-zinc-950 transition dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,.25),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(59,130,246,.22),_transparent_30%),linear-gradient(180deg,_#050505,_#18181b)] dark:text-white">
     <section className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between rounded-[2rem] border border-white/50 bg-white/55 p-5 shadow-2xl shadow-zinc-300/40 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/55 dark:shadow-black/40">
         <div>
           <p className="text-sm text-green-500">Work Schedule</p>
           <h1 className="text-5xl font-black tracking-tight">{title}</h1>
@@ -249,7 +281,7 @@ export default function App() {
         <button onClick={() => setDark(!dark)} className="rounded-full bg-white p-3 shadow dark:bg-zinc-900">{dark ? <Sun/> : <Moon/>}</button>
       </div>
 
-      <div className="mb-5 rounded-[2rem] bg-white p-4 shadow-lg dark:bg-zinc-900">
+      <div className="mb-5 rounded-[2rem] border border-white/60 bg-white/70 p-4 shadow-xl shadow-zinc-300/50 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/70 dark:shadow-black/40">
         <label className="text-sm font-semibold text-zinc-500">Choose Employee</label>
         <div className="mt-3 flex items-center gap-2 rounded-2xl bg-zinc-100 px-3 dark:bg-zinc-800">
           <Search className="size-5 text-zinc-400"/>
@@ -267,7 +299,7 @@ export default function App() {
         <button onClick={exportPdf} className="rounded-full bg-white p-3 shadow dark:bg-zinc-900"><Download/></button>
       </div>
 
-      <div ref={printRef} className="overflow-hidden rounded-[2rem] bg-white shadow-2xl dark:bg-zinc-900">
+      <div ref={printRef} className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/80 shadow-2xl shadow-zinc-400/40 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/80 dark:shadow-black/50">
         <div className="grid grid-cols-7 bg-zinc-50 text-center text-sm font-bold text-zinc-500 dark:bg-zinc-800">
           {weekdays.map((day, i) => <div className="py-3" key={`${day}-${i}`}>{day}</div>)}
         </div>
@@ -287,9 +319,9 @@ export default function App() {
       </div>
     </section>
 
-    {selectedEvent && <div className="fixed inset-0 z-10 flex items-end bg-black/40" onClick={() => setSelectedEvent(null)}>
-      <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-6 shadow-2xl animate-in slide-in-from-bottom dark:bg-zinc-900">
-        <div className="mx-auto mb-5 h-1 w-12 rounded-full bg-zinc-300"/>
+    {selectedEvent && <div className="fixed inset-0 z-10 flex items-end bg-black/50 backdrop-blur-sm" onClick={closeSelectedEvent}>
+      <div onClick={(e) => e.stopPropagation()} onTouchStart={handleSheetTouchStart} onTouchMove={handleSheetTouchMove} onTouchEnd={handleSheetTouchEnd} style={{ transform: `translateY(${sheetOffset}px)` }} className="max-h-[88vh] w-full touch-pan-y overflow-y-auto rounded-t-[2rem] border border-white/60 bg-white/95 p-6 shadow-2xl transition-transform duration-150 animate-in slide-in-from-bottom dark:border-white/10 dark:bg-zinc-900/95">
+        <div className="mx-auto mb-5 h-1.5 w-16 rounded-full bg-zinc-300 dark:bg-zinc-600"/><p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">Swipe down to close</p>
         <p className="text-zinc-500">{selectedEvent.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
         <div className={`my-5 rounded-[2rem] border p-8 text-center ${colorFor(selectedEvent.shift).bg} ${colorFor(selectedEvent.shift).text} ${colorFor(selectedEvent.shift).border}`}>
           <div className="text-6xl font-black tracking-tight">{selectedEvent.shift}</div>
@@ -303,7 +335,7 @@ export default function App() {
           <WorkingSection group={selectedWorkingGroup}/>
           <OffTodaySection daily={selectedDailyRoster} selectedEmployee={selectedEmployee}/>
         </div>
-        <button onClick={() => setSelectedEvent(null)} className="mt-6 w-full rounded-2xl bg-zinc-950 py-4 font-bold text-white dark:bg-white dark:text-black">Close</button>
+        <button onClick={closeSelectedEvent} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-zinc-950 to-zinc-700 py-4 font-bold text-white shadow-lg dark:from-white dark:to-zinc-300 dark:text-black">Close</button>
       </div>
     </div>}
   </div></main>;

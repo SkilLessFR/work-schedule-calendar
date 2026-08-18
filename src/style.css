@@ -1,6 +1,8 @@
 :root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
 * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 body { margin: 0; }
-.animate-in { animation: sheet .22s ease-out; }
+.animate-in { animation: sheet .22s cubic-bezier(.2,.8,.2,1); }
+button, input, select { transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease; }
+button:active { transform: scale(.97); }
 @keyframes sheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @media print { button, input, select, label { print-color-adjust: exact; } }
