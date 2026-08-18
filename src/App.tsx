@@ -270,9 +270,9 @@ export default function App() {
     </div></main>;
   }
 
-  return <main className={dark ? 'dark' : ''}><div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_#bbf7d0,_transparent_35%),radial-gradient(circle_at_top_right,_#bfdbfe,_transparent_30%),linear-gradient(180deg,_#f4f4f5,_#e4e4e7)] text-zinc-950 transition dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,.25),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(59,130,246,.22),_transparent_30%),linear-gradient(180deg,_#050505,_#18181b)] dark:text-white">
+  return <main className={dark ? 'dark' : ''}><div className="app-shell min-h-screen overflow-hidden text-zinc-950 transition dark:text-white">
     <section className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
-      <div className="mb-6 flex items-center justify-between rounded-[2rem] border border-white/50 bg-white/55 p-5 shadow-2xl shadow-zinc-300/40 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/55 dark:shadow-black/40">
+      <div className="app-glass mb-6 flex items-center justify-between p-5">
         <div>
           <p className="text-sm text-green-500">Work Schedule</p>
           <h1 className="text-5xl font-black tracking-tight">{title}</h1>
@@ -281,7 +281,7 @@ export default function App() {
         <button onClick={() => setDark(!dark)} className="rounded-full bg-white p-3 shadow dark:bg-zinc-900">{dark ? <Sun/> : <Moon/>}</button>
       </div>
 
-      <div className="mb-5 rounded-[2rem] border border-white/60 bg-white/70 p-4 shadow-xl shadow-zinc-300/50 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/70 dark:shadow-black/40">
+      <div className="app-glass mb-5 p-4">
         <label className="text-sm font-semibold text-zinc-500">Choose Employee</label>
         <div className="mt-3 flex items-center gap-2 rounded-2xl bg-zinc-100 px-3 dark:bg-zinc-800">
           <Search className="size-5 text-zinc-400"/>
@@ -299,7 +299,7 @@ export default function App() {
         <button onClick={exportPdf} className="rounded-full bg-white p-3 shadow dark:bg-zinc-900"><Download/></button>
       </div>
 
-      <div ref={printRef} className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/80 shadow-2xl shadow-zinc-400/40 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/80 dark:shadow-black/50">
+      <div ref={printRef} className="app-calendar overflow-hidden">
         <div className="grid grid-cols-7 bg-zinc-50 text-center text-sm font-bold text-zinc-500 dark:bg-zinc-800">
           {weekdays.map((day, i) => <div className="py-3" key={`${day}-${i}`}>{day}</div>)}
         </div>
@@ -319,9 +319,9 @@ export default function App() {
       </div>
     </section>
 
-    {selectedEvent && <div className="fixed inset-0 z-10 flex items-end bg-black/50 backdrop-blur-sm" onClick={closeSelectedEvent}>
-      <div onClick={(e) => e.stopPropagation()} onTouchStart={handleSheetTouchStart} onTouchMove={handleSheetTouchMove} onTouchEnd={handleSheetTouchEnd} style={{ transform: `translateY(${sheetOffset}px)` }} className="max-h-[88vh] w-full touch-pan-y overflow-y-auto rounded-t-[2rem] border border-white/60 bg-white/95 p-6 shadow-2xl transition-transform duration-150 animate-in slide-in-from-bottom dark:border-white/10 dark:bg-zinc-900/95">
-        <div className="mx-auto mb-5 h-1.5 w-16 rounded-full bg-zinc-300 dark:bg-zinc-600"/><p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">Swipe down to close</p>
+    {selectedEvent && <div className="sheet-overlay fixed inset-0 z-10 flex items-end" onClick={closeSelectedEvent}>
+      <div onClick={(e) => e.stopPropagation()} onTouchStart={handleSheetTouchStart} onTouchMove={handleSheetTouchMove} onTouchEnd={handleSheetTouchEnd} style={{ transform: `translateY(${sheetOffset}px)` }} className="sheet-panel max-h-[88vh] w-full touch-pan-y overflow-y-auto p-6 animate-in">
+        <div className="sheet-grabber mx-auto mb-3"/><p className="sheet-hint mb-4 text-center text-xs font-bold uppercase tracking-[0.2em]">Swipe down to close</p>
         <p className="text-zinc-500">{selectedEvent.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
         <div className={`my-5 rounded-[2rem] border p-8 text-center ${colorFor(selectedEvent.shift).bg} ${colorFor(selectedEvent.shift).text} ${colorFor(selectedEvent.shift).border}`}>
           <div className="text-6xl font-black tracking-tight">{selectedEvent.shift}</div>
@@ -335,7 +335,7 @@ export default function App() {
           <WorkingSection group={selectedWorkingGroup}/>
           <OffTodaySection daily={selectedDailyRoster} selectedEmployee={selectedEmployee}/>
         </div>
-        <button onClick={closeSelectedEvent} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-zinc-950 to-zinc-700 py-4 font-bold text-white shadow-lg dark:from-white dark:to-zinc-300 dark:text-black">Close</button>
+        <button onClick={closeSelectedEvent} className="primary-action mt-6 w-full rounded-2xl py-4 font-bold">Close</button>
       </div>
     </div>}
   </div></main>;

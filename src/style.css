@@ -1,6 +1,66 @@
 :root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; }
 * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 body { margin: 0; }
+
+.app-shell {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, .18), transparent 30rem),
+    radial-gradient(circle at 88% 8%, rgba(59, 130, 246, .14), transparent 26rem),
+    linear-gradient(180deg, #f8fafc 0%, #e4e4e7 100%);
+}
+.dark .app-shell {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, .22), transparent 30rem),
+    radial-gradient(circle at 88% 8%, rgba(59, 130, 246, .20), transparent 26rem),
+    linear-gradient(180deg, #050505 0%, #18181b 100%);
+}
+.app-glass,
+.app-calendar {
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 24px 60px rgba(63, 63, 70, .16);
+  backdrop-filter: blur(18px);
+}
+.dark .app-glass,
+.dark .app-calendar {
+  border-color: rgba(255, 255, 255, .10);
+  background: rgba(24, 24, 27, .82);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .42);
+}
+.sheet-overlay {
+  background: rgba(0, 0, 0, .48);
+  backdrop-filter: blur(6px);
+}
+.sheet-panel {
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 2rem 2rem 0 0;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 -24px 70px rgba(0, 0, 0, .28);
+  transition: transform .15s ease-out;
+  will-change: transform;
+}
+.dark .sheet-panel {
+  border-color: rgba(255, 255, 255, .12);
+  background: rgba(24, 24, 27, .97);
+}
+.sheet-grabber {
+  width: 4rem;
+  height: .375rem;
+  border-radius: 999px;
+  background: #d4d4d8;
+}
+.dark .sheet-grabber { background: #52525b; }
+.sheet-hint { color: #a1a1aa; }
+.primary-action {
+  color: #fff;
+  background: linear-gradient(135deg, #18181b, #3f3f46);
+  box-shadow: 0 14px 28px rgba(24, 24, 27, .22);
+}
+.dark .primary-action {
+  color: #09090b;
+  background: linear-gradient(135deg, #fff, #d4d4d8);
+}
 .animate-in { animation: sheet .22s cubic-bezier(.2,.8,.2,1); }
 button, input, select { transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease; }
 button:active { transform: scale(.97); }
